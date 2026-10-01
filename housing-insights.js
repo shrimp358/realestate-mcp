@@ -12,7 +12,7 @@ export function parseSeoul(html) {
     const cells=[...m[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map(t=>clean(t[1]));
     if(cells.length<6) return [];
     const cafe=m[1].match(/cafeOpenPopup\('([\w-]+)'\)/)?.[1];
-    return [{district:cells[1],type:cells[2],name:cells[3],address:cells[4],stage:cells[5],source:cafe ? `https://cleanup.seoul.go.kr/sures/assc/scrin/index.do?cafeId=${encodeURIComponent(cafe)}` : SEOUL}];
+    return [{district:cells[1],type:cells[2],name:cells[3],address:cells[4],stage:cells[5]||'미공개',source:cafe ? `https://cleanup.seoul.go.kr/sures/assc/scrin/index.do?cafeId=${encodeURIComponent(cafe)}` : SEOUL}];
   });
 }
 export function parseGyeonggi(html) {
@@ -26,7 +26,7 @@ export function parseGyeonggi(html) {
 }
 export function interpretation(stage) {
   if(/해산|준공/.test(stage)) return '완료·해산 단계: 이미 반영된 변화인지 확인해야 합니다. 새 미래 호재로 단정하지 않습니다.';
-  if(/관리처분|사업시행|착공/.test(stage)) return '사업 진행에 따른 주거환경 개선 가능성(추정). 공사 소음·이주·추가 공급과 일정 지연도 확인해야 합니다.';
+  if(/관리처분|사업시행|착공|분양/.test(stage)) return '사업 진행에 따른 주거환경 개선 가능성(추정). 공사 소음·이주·추가 공급과 일정 지연도 확인해야 합니다.';
   return '초기 또는 세부 단계 미확인: 환경 개선 가능성(추정)은 있으나 인허가·동의율·사업성·기간을 추가 확인해야 합니다.';
 }
 export function distanceMeters(a,b) {
@@ -125,7 +125,7 @@ export function createHousingInsights({env=process.env,fetcher=fetch,routeFetche
     else if(!jibun)output.commute.message='정확한 출발 위치를 계산하려면 지번이 필요합니다.';
     try{
       const data=await projects(region);
-      const matches=data.rows.filter(r=>r.address.includes(dong));
+      const matches=data.rows.filter(r=>/재건축|재개발|가로주택|리모델링/.test(r.type) && r.address.includes(dong));
       const rows=matches.slice(0,10).map(r=>({...r,interpretation:interpretation(r.stage),distance:null}));
       if(point){for(const row of rows){try{const normalized=row.address.replace(/\([^)]*\)/g,'').replace(/번지.*$/,'').trim();const p=await geocode(normalized.startsWith('서울')||normalized.startsWith('경기')?normalized:`${region.name} ${normalized}`);row.distance=distanceMeters(point,p);}catch{}}}
       output.redevelopment={status:'조회 완료',rows,checkedAt:data.checkedAt,source:data.source,coverage:'같은 법정동 이름이 주소에 포함된 사업 후보입니다. 인접 동·다른 이름·미등록 사업은 포함되지 않을 수 있습니다. 거리는 대표 주소 사이 직선거리입니다.',truncated:data.truncated||matches.length>10,disclaimer:'진행 단계는 공식 공개 현황이고 해석은 추정입니다. 가격 상승 여부·수익을 보장하지 않습니다. 경기도의 조합(시행자) 표시는 세부 인허가 단계를 뜻하지 않습니다.'};
