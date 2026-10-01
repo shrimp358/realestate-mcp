@@ -28,7 +28,7 @@ import { z } from "zod";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { installPrivateAuth } from "./private-auth.js";
 import { resolveRegion } from "./lawd-codes.js";
 import {
   parseApiResponse,
@@ -545,24 +545,11 @@ function createRateLimiter({ windowMs = 60_000, max = 30 } = {}) {
 }
 
 async function runHttpServer(port) {
-  const accessToken = process.env.MCP_ACCESS_TOKEN;
-  if (!accessToken || !/^[A-Za-z0-9_-]{32,256}$/.test(accessToken)) {
-    throw new Error("HTTP 모드는 32~256자리의 MCP_ACCESS_TOKEN이 필요합니다. 공개 접근은 허용하지 않습니다.");
-  }
-  const expectedDigest = createHash("sha256").update(accessToken).digest();
   const app = express();
-  app.use("/mcp", (req, res, next) => {
-    const authorization = req.headers.authorization;
-    const match = typeof authorization === "string"
-      ? /^Bearer ([A-Za-z0-9_-]{32,256})$/.exec(authorization)
-      : null;
-    if (match) {
-      const actualDigest = createHash("sha256").update(match[1]).digest();
-      if (timingSafeEqual(actualDigest, expectedDigest)) return next();
-    }
-    res.set("WWW-Authenticate", "Bearer");
-    res.set("Cache-Control", "no-store");
-    return res.status(401).json({ error: "MCP 연결 인증이 필요합니다." });
+  if (process.env.MCP_PUBLIC_URL) app.set("trust proxy", 1);
+  installPrivateAuth(app, {
+    password: process.env.MCP_ACCESS_TOKEN,
+    publicUrl: process.env.MCP_PUBLIC_URL || `http://localhost:${port}`,
   });
   // 인증 전에 본문 파싱이나 MCP 도구 생성, 외부 API 조회를 실행하지 않는다.
   app.use(express.json({ limit: "1mb" }));
