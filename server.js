@@ -28,6 +28,7 @@ import { z } from "zod";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { resolveRegion } from "./lawd-codes.js";
 import {
   parseApiResponse,
@@ -522,7 +523,7 @@ server.registerTool(
 // ---------- 원격(HTTP) 모드 ----------
 // Render 등에 배포될 때 PORT 환경변수가 설정된다. 이때는 무상태(stateless) StreamableHTTP로
 // 요청마다 새 McpServer+transport를 만들어 세션을 완전히 분리한다(세션 저장소 불필요).
-// 개인 소유 인증키 하나를 불특정 다수가 공유하므로, IP당 분당 요청 수를 아주 단순하게 제한한다.
+// MCP 연결키를 검증한 요청만 처리한다. 국토부 인증키와 연결키는 서로 다른 비밀값이다.
 
 function createRateLimiter({ windowMs = 60_000, max = 30 } = {}) {
   const hits = new Map(); // ip -> { count, resetAt }
@@ -544,8 +545,27 @@ function createRateLimiter({ windowMs = 60_000, max = 30 } = {}) {
 }
 
 async function runHttpServer(port) {
+  const accessToken = process.env.MCP_ACCESS_TOKEN;
+  if (!accessToken || !/^[A-Za-z0-9_-]{32,256}$/.test(accessToken)) {
+    throw new Error("HTTP 모드는 32~256자리의 MCP_ACCESS_TOKEN이 필요합니다. 공개 접근은 허용하지 않습니다.");
+  }
+  const expectedDigest = createHash("sha256").update(accessToken).digest();
   const app = express();
-  app.use(express.json());
+  app.use("/mcp", (req, res, next) => {
+    const authorization = req.headers.authorization;
+    const match = typeof authorization === "string"
+      ? /^Bearer ([A-Za-z0-9_-]{32,256})$/.exec(authorization)
+      : null;
+    if (match) {
+      const actualDigest = createHash("sha256").update(match[1]).digest();
+      if (timingSafeEqual(actualDigest, expectedDigest)) return next();
+    }
+    res.set("WWW-Authenticate", "Bearer");
+    res.set("Cache-Control", "no-store");
+    return res.status(401).json({ error: "MCP 연결 인증이 필요합니다." });
+  });
+  // 인증 전에 본문 파싱이나 MCP 도구 생성, 외부 API 조회를 실행하지 않는다.
+  app.use(express.json({ limit: "1mb" }));
   app.use("/mcp", createRateLimiter());
 
   app.get("/", (_req, res) => res.send("realestate-mcp is running"));
