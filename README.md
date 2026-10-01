@@ -109,41 +109,26 @@ npm test          # 키 없이도 순수 로직 + 프로토콜 동작 확인
 2. 서버를 자식 프로세스로 띄워 MCP 프로토콜(initialize/tools list/tools call)이
    키 없이도 크래시 없이 안내 메시지를 반환하는지 확인
 
-## 원격(HTTP) 배포 — 개인 연결키로 접근 보호
+## 원격(HTTP) 배포 — 개인 비밀번호로 ChatGPT 연결
 
-이 저장소의 HTTP 서버는 `MCP_ACCESS_TOKEN`이 없으면 시작하지 않습니다.
-32~256자리 영문·숫자·밑줄·하이픈으로 구성된 무작위 연결키를 Render 환경변수에
-설정하고, 연결하는 클라이언트에서 `Authorization: Bearer <연결키>` 헤더를 보내야 합니다.
-잘못된 연결키와 연결키 없는 요청은 외부 API 호출 전에 401로 차단됩니다.
-연결키와 공공데이터 인증키는 코드·GitHub·URL·대화에 넣지 마세요.
-클라이언트가 인증 헤더를 지원하는지 확인해야 하며, ChatGPT 웹의 연결 방식은 별도 확인이 필요합니다.
-아래 원본의 무인증 공유 안내는 이 수정본에 적용되지 않습니다.
+`PORT`가 설정되면 HTTP 모드로 시작합니다. 다음 Render 환경변수를 설정하세요.
 
-기본은 로컬 stdio 서버(각자 `key.txt`/`REALESTATE_API_KEY` 필요)지만, `PORT` 환경변수가
-설정되면 이 서버는 자동으로 **StreamableHTTP 원격 모드**로 전환됩니다. 이걸 Render 같은
-곳에 올리면 배포한 사람의 키 하나로 여러 사용자가 각자 키 없이 접속할 수 있습니다.
+- `REALESTATE_API_KEY`: 본인의 공공데이터 인증키
+- `MCP_ACCESS_TOKEN`: 본인이 정한 12~128자 로그인 비밀번호 (한글·특수문자 사용 가능)
+- `MCP_PUBLIC_URL`: HTTPS 서버 기본 주소 (예: `https://서비스명.onrender.com`)
 
-1. [Render](https://render.com)에 가입 (GitHub 계정으로 가입하면 연동이 빠름)
-2. New → Web Service → 이 GitHub repo(`kimju1416/realestate-mcp`) 선택
-3. 설정값:
-   - Runtime: Node
-   - Build Command: `npm install`
-   - Start Command: `node server.js`
-   - Instance Type: Free
-4. **Environment** 탭에서 환경변수 추가 (여기에 본인 키를 직접 입력 — 코드에는 절대 넣지 않음):
-   - `REALESTATE_API_KEY` = (data.go.kr에서 발급받은 본인 인증키)
-5. Deploy → 완료되면 `https://<서비스명>.onrender.com` 같은 URL이 생김
-6. 다른 사람은 Claude Code에서 원격 MCP로 등록:
-   ```bash
-   claude mcp add --transport http realestate-remote https://<서비스명>.onrender.com/mcp
-   ```
-   이러면 각자 API 키 없이 바로 조회 가능합니다.
+Build Command는 `npm ci --ignore-scripts`, Start Command는 `node server.js`로 설정합니다.
+ChatGPT 개인 MCP 앱에서 서버 URL에 `/mcp`를 붙이고 OAuth 및 동적 클라이언트 등록(DCR)을 사용하세요.
+서버 로그인 화면에서 비밀번호를 입력하면 접속 증표가 발급됩니다.
+비밀번호 자체를 Bearer 헤더로 보내는 방식은 지원하지 않습니다.
+등록은 ChatGPT HTTPS 콜백만 허용하며, 인증 코드 교환은 PKCE를 검증합니다.
 
-**알아둘 점**
-- 무료 티어는 15분간 요청이 없으면 서버가 잠들고, 그 다음 첫 요청은 30~50초 정도 느릴 수 있습니다 (그 이후엔 정상 속도).
-- 남용 방지를 위해 IP당 분당 30회로 요청을 제한합니다 (`server.js`의 `createRateLimiter`).
-- 무상태(stateless) 모드라 요청마다 새 세션으로 처리됩니다 — 세션을 유지해야 하는 기능(예: 서버→클라이언트 스트리밍 알림)은 지원하지 않지만, 이 서버의 도구들은 전부 단순 조회형이라 문제 없습니다.
-- data.go.kr 개발계정 트래픽 한도(서비스당 하루 10,000건)를 접속자 전원이 나눠 쓰게 됩니다. 하루 수백 건 수준이면 충분하지만, 트래픽이 크게 늘면 운영계정 전환(별도 심사)이 필요할 수 있습니다.
+비밀번호 없는 요청과 유효하지 않은 접속 증표는 외부 API 호출 전에 401로 차단합니다.
+로그인 실패 횟수에도 제한이 적용됩니다. 비밀번호와 인증키를 코드·GitHub·URL·대화에 넣지 마세요.
+비밀번호 변경 후에는 이전 클라이언트 등록과 접속 증표가 무효화되므로 ChatGPT 앱을 다시 연결하세요.
+정상 조회는 본인의 공공데이터 API 한도를 사용합니다. 무료 서버는 잠든 후 첫 요청이 느릴 수 있습니다.
+
+인증 흐름은 `node test/oauth-http.js`로 실제 공공데이터 호출 없이 검사할 수 있습니다.
 
 ## 참고사항
 
