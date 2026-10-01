@@ -5,14 +5,16 @@ import {installHousingWeb} from '../housing-web.js';
 const app=express(), server=app.listen(0,'127.0.0.1');
 await new Promise(r=>server.once('listening',r));
 const base=`http://localhost:${server.address().port}`, password='Fixture!Password12';
-let calls=0;
+let calls=0, insightCalls=0;
 const row={아파트명:'검증 아파트',법정동:'봉천동',전용면적:84,거래금액만원:90000,계약일:'2026-09-15',층:8,건축년도:2003};
-installHousingWeb(app,{password,publicUrl:base,fetchTrades:async()=>{calls++;return {rows:[row,{...row,거래금액만원:110000},{...row,거래금액만원:89999},{...row,전용면적:84.01},{...row,해제여부:'Y'},{...row,아파트명:'<script>검증</script>'}],totalCount:6};}});
+installHousingWeb(app,{password,publicUrl:base,insights:{inspect:async()=>{insightCalls++;return {name:'<script>검증</script>',address:'서울 관악',commute:{status:'미확인',message:'키 연결 대기'},redevelopment:{status:'조회 완료',rows:[],checkedAt:'fixture',coverage:'동 후보',source:'https://cleanup.seoul.go.kr/',disclaimer:'추정'}};}},fetchTrades:async()=>{calls++;return {rows:[row,{...row,거래금액만원:110000},{...row,거래금액만원:89999},{...row,전용면적:84.01},{...row,해제여부:'Y'},{...row,아파트명:'<script>검증</script>'}],totalCount:6};}});
 const request=(path,opts={})=>fetch(base+path,{redirect:'manual',...opts});
 const post=(fields,cookie)=>({method:'POST',headers:{Origin:base,'Content-Type':'application/x-www-form-urlencoded',...(cookie?{Cookie:cookie}:{})},body:new URLSearchParams(fields)});
 try {
   assert.match(await (await request('/housing')).text(),/개인 비밀번호/);
   assert.equal(calls,0);
+  assert.equal((await request('/housing/insights',post({region:'11620',dong:'봉천동'}))).status,303);
+  assert.equal(insightCalls,0);
   const values={region:'11620',month:'2026-09',months:1,min:9,max:11,area:84,name:'',dong:''};
   assert.equal((await request('/housing/search',post(values))).status,303);
   assert.equal(calls,0);
@@ -33,6 +35,9 @@ try {
   assert.match(html,/&lt;script&gt;검증&lt;\/script&gt;/);
   assert.doesNotMatch(html,/<script>/);
   assert.equal(calls,1);
+  const details=await request('/housing/insights',post({region:'11620',dong:'봉천동'},cookie));
+  const detailHtml=await details.text();assert.equal(details.status,200);assert.match(detailHtml,/키 연결 대기/);assert.doesNotMatch(detailHtml,/<script>/);assert.equal(insightCalls,1);
+  assert.equal((await request('/housing/insights',{...post({region:'11620',dong:'봉천동'},cookie),headers:{Cookie:cookie,Origin:'https://attacker.invalid','Content-Type':'application/x-www-form-urlencoded'}})).status,403);assert.equal(insightCalls,1);
   assert.match(await (await request('/housing/search',post({...values,min:10},cookie))).text(),/저장된 자료 1개월/);
   assert.equal(calls,1);
   assert.equal((await request('/housing/search',post({...values,region:'26110'},cookie))).status,400);
