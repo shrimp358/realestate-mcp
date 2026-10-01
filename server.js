@@ -29,6 +29,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { installPrivateAuth } from "./private-auth.js";
+import { installHousingWeb } from "./housing-web.js";
 import { resolveRegion } from "./lawd-codes.js";
 import {
   parseApiResponse,
@@ -551,11 +552,17 @@ async function runHttpServer(port) {
     password: process.env.MCP_ACCESS_TOKEN,
     publicUrl: process.env.MCP_PUBLIC_URL || `http://localhost:${port}`,
   });
+  installHousingWeb(app, {
+    password: process.env.MCP_ACCESS_TOKEN,
+    publicUrl: process.env.MCP_PUBLIC_URL || `http://localhost:${port}`,
+    fetchTrades,
+  });
   // 인증 전에 본문 파싱이나 MCP 도구 생성, 외부 API 조회를 실행하지 않는다.
   app.use(express.json({ limit: "1mb" }));
   app.use("/mcp", createRateLimiter());
 
-  app.get("/", (_req, res) => res.send("realestate-mcp is running"));
+  app.get("/", (_req, res) => res.redirect(302, "/housing"));
+  app.get("/healthz", (_req, res) => res.send("realestate-mcp is running"));
 
   app.post("/mcp", async (req, res) => {
     try {
