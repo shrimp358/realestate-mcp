@@ -39,7 +39,9 @@ try {
   const ticket = new URL(login, base).searchParams.get("request");
   const loginPage = await request(login);
   assert.equal(loginPage.status, 200);
+  assert.equal(loginPage.headers.get("referrer-policy"), "strict-origin");
   assert.match(loginPage.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+  assert.match(loginPage.headers.get("content-security-policy"), /form-action 'self' https:\/\/chatgpt\.com https:\/\/chat\.openai\.com;/);
   assert.equal((await loginPage.text()).includes(password), false);
   const wrong = await request("/login", form({request:ticket, password:"wrong"}));
   assert.equal(wrong.status, 401);
