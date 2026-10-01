@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import express from 'express';
+import {installHousingWeb} from '../housing-web.js';
+
+const app=express(), server=app.listen(0,'127.0.0.1');
+await new Promise(r=>server.once('listening',r));
+const base=`http://localhost:${server.address().port}`, password='Fixture!Password12';
+let calls=0;
+const row={아파트명:'검증 아파트',법정동:'봉천동',전용면적:84,거래금액만원:90000,계약일:'2026-09-15',층:8,건축년도:2003};
+installHousingWeb(app,{password,publicUrl:base,fetchTrades:async()=>{calls++;return {rows:[row,{...row,거래금액만원:110000},{...row,거래금액만원:89999},{...row,전용면적:84.01},{...row,해제여부:'Y'},{...row,아파트명:'<script>검증</script>'}],totalCount:6};}});
+const request=(path,opts={})=>fetch(base+path,{redirect:'manual',...opts});
+const post=(fields,cookie)=>({method:'POST',headers:{Origin:base,'Content-Type':'application/x-www-form-urlencoded',...(cookie?{Cookie:cookie}:{})},body:new URLSearchParams(fields)});
+try {
+  assert.match(await (await request('/housing')).text(),/개인 비밀번호/);
+  assert.equal(calls,0);
+  const values={region:'11620',month:'2026-09',months:1,min:9,max:11,area:84,name:'',dong:''};
+  assert.equal((await request('/housing/search',post(values))).status,303);
+  assert.equal(calls,0);
+  assert.equal((await request('/housing/login',{...post({password}),headers:{Origin:'https://attacker.invalid','Content-Type':'application/x-www-form-urlencoded'}})).status,403);
+  assert.equal((await request('/housing/login',post({password:'wrong'}))).status,401);
+  const login=await request('/housing/login',post({password}));
+  assert.equal(login.status,303);
+  const cookie=login.headers.get('set-cookie').split(';')[0];
+  assert.match(login.headers.get('set-cookie'),/HttpOnly/);
+  assert.match(login.headers.get('set-cookie'),/SameSite=Strict/);
+  assert.equal((await request('/housing',{headers:{Cookie:cookie}})).status,200);
+  assert.equal(calls,0);
+  const found=await request('/housing/search',post(values,cookie));
+  const html=await found.text();
+  assert.equal(found.status,200);
+  assert.match(html,/거래 <strong>3건/);
+  assert.match(html,/9억원/);assert.match(html,/11억원/);
+  assert.match(html,/&lt;script&gt;검증&lt;\/script&gt;/);
+  assert.doesNotMatch(html,/<script>/);
+  assert.equal(calls,1);
+  assert.match(await (await request('/housing/search',post({...values,min:10},cookie))).text(),/저장된 자료 1개월/);
+  assert.equal(calls,1);
+  assert.equal((await request('/housing/search',post({...values,region:'26110'},cookie))).status,400);
+  assert.equal((await request('/housing/search',post({...values,months:99},cookie))).status,400);
+  assert.equal(calls,1);
+  const tampered=cookie.slice(0,-5)+'bogus';
+  assert.match(await (await request('/housing',{headers:{Cookie:tampered}})).text(),/개인 비밀번호/);
+  const logout=await request('/housing/logout',post({},cookie));
+  assert.equal(logout.status,303);assert.match(logout.headers.get('set-cookie'),/Expires=Thu, 01 Jan 1970/);
+  console.log('PASS: private website login, CSRF, signed cookie, price/area boundaries, cancellations, escaping, cached queries and invalid-input protection; no government API calls.');
+} finally {await new Promise(r=>server.close(r));}
