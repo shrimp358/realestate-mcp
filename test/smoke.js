@@ -222,7 +222,7 @@ try {
 
   const list = await rpc("tools/list", {});
   const tools = list.result?.tools ?? [];
-  check("tools/list 도구 7개", tools.length === 7, tools.map((t) => t.name).join(", "));
+  check("tools/list 도구 8개", tools.length === 8, tools.map((t) => t.name).join(", "));
 
   const call = await rpc("tools/call", {
     name: "search_apartment_trades",
