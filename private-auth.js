@@ -93,7 +93,8 @@ export function installPrivateAuth(app, { password, publicUrl }) {
   cleanup.unref();
   const page = (id, error = "") => `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>아파트 실거래가 로그인</title><style>body{font:17px system-ui;background:#f3f6fa;padding:8vh 20px;color:#18304a}main{max-width:440px;margin:auto;background:white;padding:32px;border-radius:16px}input,button{box-sizing:border-box;width:100%;padding:13px;margin-top:12px;font:inherit}button{background:#176b5b;color:white;border:0;border-radius:8px}.error{color:#ac2030}</style><main><h1>아파트 실거래가</h1><p>ChatGPT 연결을 허용하려면 본인이 설정한 서버 비밀번호를 입력하세요.</p><p class="error">${escapeHtml(error)}</p><form method="post" action="/login"><input type="hidden" name="request" value="${id}"><label for="password">개인 비밀번호</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"><button type="submit">로그인하고 연결</button></form><p>공공데이터 인증키는 여기에 입력하지 않습니다.</p></main></html>`;
   app.use("/login", (_req, res, next) => {
-    res.set({"Cache-Control":"no-store", "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff"}); next();
+    // no-referrer makes Chromium submit this form with Origin:null, rejecting valid logins.
+    res.set({"Cache-Control":"no-store", "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", "Referrer-Policy":"strict-origin", "X-Content-Type-Options":"nosniff"}); next();
   });
   app.get("/login", (req, res) => {
     const id = req.query.request;
