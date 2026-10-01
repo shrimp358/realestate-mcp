@@ -30,6 +30,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { installPrivateAuth } from "./private-auth.js";
 import { installHousingWeb } from "./housing-web.js";
+import { createHousingInsights } from "./housing-insights.js";
+const housingInsights = createHousingInsights();
 import { resolveRegion } from "./lawd-codes.js";
 import {
   parseApiResponse,
@@ -518,6 +520,10 @@ server.registerTool(
   }
   );
 
+  server.registerTool('inspect_housing_environment', {
+    description: '서울·경기 아파트의 선릉역 대중교통 예상 시간과 같은 법정동 정비사업 공식 현황을 확인한다. ODsay·카카오 키가 없으면 통근 시간은 미확인으로 표시한다. 단계와 추정을 구분하며 가격 상승을 예측하지 않는다. 버튼/사용자 요청 시만 실행한다.',
+    inputSchema: {region:z.string().describe('법정동 시군구 5자리 코드'),dong:z.string().describe('법정동 이름'),name:z.string().optional(),jibun:z.string().optional()}
+  },async(args)=>{try{return ok(JSON.stringify(await housingInsights.inspect(args),null,2));}catch{return fail(new Error('지역·법정동·지번을 확인해 주세요.'));}});
   return server;
 }
 
@@ -556,6 +562,7 @@ async function runHttpServer(port) {
     password: process.env.MCP_ACCESS_TOKEN,
     publicUrl: process.env.MCP_PUBLIC_URL || `http://localhost:${port}`,
     fetchTrades,
+    insights: housingInsights,
   });
   // 인증 전에 본문 파싱이나 MCP 도구 생성, 외부 API 조회를 실행하지 않는다.
   app.use(express.json({ limit: "1mb" }));
