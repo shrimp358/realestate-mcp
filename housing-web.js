@@ -123,7 +123,9 @@ export function installHousingWeb(app, {password, publicUrl, fetchTrades, insigh
       const message=String(error?.message||'').slice(0,180);
       const timeout=/timeout|aborted/i.test(message);
       const failure=timeout?'네이버 응답이 지연되어 현재 매물을 불러오지 못했습니다. 잠시 후 다시 시도하거나 네이버페이 부동산에서 직접 확인해 주세요.':`현재 매물을 가져오지 못했습니다. ${esc(message||'네이버 응답 또는 검색 조건을 확인해 주세요.')}`;
-      res.status(400).type('html').send(shell(`<a href="/housing">← 실거래 검색으로 돌아가기</a><p class="error">${failure}</p><p><a href="https://new.land.naver.com/complexes" target="_blank" rel="noopener noreferrer">네이버페이 부동산에서 직접 검색 ↗</a></p><p class="note">비공식 API는 네이버 서비스 변경이나 요청 제한에 따라 중단될 수 있습니다.</p>`,true));
+      const query=['네이버페이 부동산',String(req.body.dong||''),String(req.body.name||'')].filter(Boolean).join(' ');
+      const directSearch=`https://search.naver.com/search.naver?${new URLSearchParams({query})}`;
+      res.status(400).type('html').send(shell(`<a href="/housing">← 실거래 검색으로 돌아가기</a><p class="error">${failure}</p><p><a href="${esc(directSearch)}" target="_blank" rel="noopener noreferrer">${esc(req.body.name||'아파트')} 네이버에서 바로 검색 ↗</a></p><p class="note">검색어에 동 이름과 단지명을 넣어 네이버페이 부동산 매물을 확인할 수 있습니다. 비공식 API는 응답 지연이나 서비스 변경으로 중단될 수 있습니다.</p>`,true));
     }
   });
   app.post('/housing/search', sameOrigin, requireSession, express.urlencoded({extended:false,limit:'8kb'}), async(req,res)=>{

@@ -27,4 +27,8 @@ assert.equal(articleRequest.url.searchParams.get('tradeType'),'A1');
 assert.equal(articleRequest.options.headers.Referer,'https://new.land.naver.com/complexes');
 assert.match(articleRequest.options.headers['User-Agent'],/^Mozilla\//);
 assert.equal(normalizeNaverListing({articleNo:'a',dealOrWarrantPrc:'10억',area2:'84.5'}).exclusiveArea,84.5);
+await findListings({regionCode:'11620',dong:'봉천동',name:'검증 아파트',minPrice:9,maxPrice:11,minArea:70,maxArea:84});
+assert.equal(calls.filter(call=>call.url.pathname==='/api/regions/list').length,1,'region directory should be reused from the short-lived cache');
+assert.equal(calls.filter(call=>call.url.pathname==='/api/regions/complexes').length,1,'complex directory should be reused from the short-lived cache');
+assert.equal(calls.filter(call=>call.url.pathname==='/api/articles/complex/12345').length,2,'live listing response should be fetched again, not cached');
 console.log('PASS: Naver listing endpoint, field normalization, headers, and minimum/maximum area filters; fixture only, no live calls.');

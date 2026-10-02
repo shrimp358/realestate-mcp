@@ -39,7 +39,7 @@ try {
   assert.equal(listings.status,200);assert.equal(listingArgs.minArea,70);
   assert.equal((await request('/housing/listings',post({...values,region:'11620',dong:'???',name:'?? ???',minArea:85},cookie))).status,400);
   const timeoutPage=await request('/housing/listings',post({...values,region:'11620',dong:'???',name:'timeout'},cookie));
-  assert.equal(timeoutPage.status,400);assert.match(await timeoutPage.text(),/new\.land\.naver\.com/);
+  const timeoutHtml=await timeoutPage.text();assert.equal(timeoutPage.status,400);assert.match(timeoutHtml,/search\.naver\.com/);assert.match(timeoutHtml,/timeout.*네이버에서 바로 검색/);
   const details=await request('/housing/insights',post({region:'11620',dong:'봉천동'},cookie));
   const detailHtml=await details.text();assert.equal(details.status,200);assert.match(detailHtml,/키 연결 대기/);assert.doesNotMatch(detailHtml,/<script>/);assert.equal(insightCalls,1);
   assert.equal((await request('/housing/insights',{...post({region:'11620',dong:'봉천동'},cookie),headers:{Cookie:cookie,Origin:'https://attacker.invalid','Content-Type':'application/x-www-form-urlencoded'}})).status,403);assert.equal(insightCalls,1);
