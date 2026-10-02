@@ -31,7 +31,9 @@ import { fileURLToPath } from "node:url";
 import { installPrivateAuth } from "./private-auth.js";
 import { installHousingWeb } from "./housing-web.js";
 import { createHousingInsights } from "./housing-insights.js";
+import { createNaverListings } from "./naver-listings.js";
 const housingInsights = createHousingInsights();
+const naverListings = createNaverListings();
 import { resolveRegion } from "./lawd-codes.js";
 import {
   parseApiResponse,
@@ -563,6 +565,7 @@ async function runHttpServer(port) {
     publicUrl: process.env.MCP_PUBLIC_URL || `http://localhost:${port}`,
     fetchTrades,
     insights: housingInsights,
+    findListings: naverListings,
   });
   // 인증 전에 본문 파싱이나 MCP 도구 생성, 외부 API 조회를 실행하지 않는다.
   app.use(express.json({ limit: "1mb" }));

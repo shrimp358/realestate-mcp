@@ -25,9 +25,16 @@ export function parseGyeonggi(html) {
   });
 }
 export function interpretation(stage) {
-  if(/해산|준공/.test(stage)) return '완료·해산 단계: 이미 반영된 변화인지 확인해야 합니다. 새 미래 호재로 단정하지 않습니다.';
-  if(/관리처분|사업시행|착공|분양/.test(stage)) return '사업 진행에 따른 주거환경 개선 가능성(추정). 공사 소음·이주·추가 공급과 일정 지연도 확인해야 합니다.';
-  return '초기 또는 세부 단계 미확인: 환경 개선 가능성(추정)은 있으나 인허가·동의율·사업성·기간을 추가 확인해야 합니다.';
+  return assessProject(stage).interpretation;
+}
+export function assessProject(stage) {
+  const value=String(stage||'').replace(/\s/g,'');
+  if(/준공|이전고시|조합해산/.test(value)) return {category:'사업 완료·마무리 단계',rank:0,interpretation:'공식 단계상 완료 또는 마무리 단계입니다. 새로 발생할 미래 호재인지, 변화가 이미 가격과 생활환경에 반영됐는지 확인하세요.'};
+  if(/관리처분인가|관리처분계획인가|착공|공사중|이주개시|철거/.test(value)) return {category:'사업 실행이 확정된 진척 단계',rank:1,interpretation:'관리처분인가 이후 또는 이주·철거·착공 단계로, 사업 실행 가능성이 높은 구간입니다. 다만 추가 분담금, 금융·공사 변수, 일정 지연은 남아 있습니다.'};
+  if(/사업시행인가|사업시행계획인가/.test(value)) return {category:'주요 인허가 통과 · 기대해 볼 단계',rank:2,interpretation:'사업시행계획이 공식 인가된 단계입니다. 사업이 상당히 진척됐지만 관리처분인가와 이주·착공 등 후속 절차가 남아 있어 확정 완공으로 볼 수는 없습니다.'};
+  if(/조합설립인가|조합설립/.test(value)) return {category:'추진 주체 구성 · 장기 불확실',rank:3,interpretation:'조합 설립 단계입니다. 추진 기반은 생겼지만 사업시행인가 전이며, 동의·사업성·인허가에 따라 일정과 결과가 달라질 수 있습니다.'};
+  if(/추진위원회|추진위|정비구역|정비계획|안전진단|후보지|기본계획|주민제안|조합원모집/.test(value)) return {category:'초기 단계 · 장기 불확실',rank:4,interpretation:'초기 검토·구역 지정·추진위원회 또는 모집 단계입니다. 실제 사업으로 이어질지와 소요 기간을 가늠하기 어렵고, 10년 이상 걸리거나 중단될 수도 있습니다.'};
+  return {category:'공식 단계만으로 판정하기 어려움',rank:5,interpretation:'공개된 단계가 세부 인허가 절차를 나타내지 않거나 확인되지 않습니다. 조합(시행자) 등 포괄적인 표시는 재건축 확정으로 해석하지 말고 공식 사업 자료를 추가 확인하세요.'};
 }
 export function distanceMeters(a,b) {
   const rad=n=>n*Math.PI/180, dlat=rad(b.y-a.y),dlon=rad(b.x-a.x);
@@ -54,7 +61,7 @@ export function createHousingInsights({env=process.env,fetcher=fetch,routeFetche
     const job=(async()=>{const data=await fn();if(cache.size>=1000)cache.delete(cache.keys().next().value);cache.set(id,{data,until:Date.now()+ttl});return data;})();
     pending.set(id,job);try{return await job;}finally{pending.delete(id);}
   };
-  const use=kind=>{const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());if(counts.day!==day)counts={day,odsay:0,kakao:0};if(counts[kind]>=(kind==='odsay'?40:160))throw new Error('오늘 추가 조회 제한에 도달했습니다. 저장된 결과 또는 내일 이용해 주세요.');counts[kind]++;};
+  const use=kind=>{const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());if(counts.day!==day)counts={day,odsay:0,kakao:0};if(counts[kind]>=(kind==='odsay'?25:160))throw new Error('오늘 추가 조회 제한에 도달했습니다. 저장된 결과 또는 내일 이용해 주세요.');counts[kind]++;};
   const request=async(url,options={})=>{const res=await fetcher(url,{...options,signal:AbortSignal.timeout(20000)});if(!res.ok)throw new Error('외부 서비스가 응답하지 않습니다.');return res;};
   async function geocode(query,keyword=false) {
     if(!env.KAKAO_REST_API_KEY) throw new Error('카카오 주소 검색 키 연결 대기');
@@ -126,7 +133,7 @@ export function createHousingInsights({env=process.env,fetcher=fetch,routeFetche
     try{
       const data=await projects(region);
       const matches=data.rows.filter(r=>/재건축|재개발|가로주택|리모델링/.test(r.type) && r.address.includes(dong));
-      const rows=matches.slice(0,10).map(r=>({...r,interpretation:interpretation(r.stage),distance:null}));
+      const rows=matches.map(r=>({...r,assessment:assessProject(r.stage),interpretation:interpretation(r.stage),distance:null})).sort((a,b)=>a.assessment.rank-b.assessment.rank).slice(0,10);
       if(point){for(const row of rows){try{const normalized=row.address.replace(/\([^)]*\)/g,'').replace(/번지.*$/,'').trim();const p=await geocode(normalized.startsWith('서울')||normalized.startsWith('경기')?normalized:`${region.name} ${normalized}`);row.distance=distanceMeters(point,p);}catch{}}}
       output.redevelopment={status:'조회 완료',rows,checkedAt:data.checkedAt,source:data.source,coverage:'같은 법정동 이름이 주소에 포함된 사업 후보입니다. 인접 동·다른 이름·미등록 사업은 포함되지 않을 수 있습니다. 거리는 대표 주소 사이 직선거리입니다.',truncated:data.truncated||matches.length>10,disclaimer:'진행 단계는 공식 공개 현황이고 해석은 추정입니다. 가격 상승 여부·수익을 보장하지 않습니다. 경기도의 조합(시행자) 표시는 세부 인허가 단계를 뜻하지 않습니다.'};
     }catch{output.redevelopment={status:'조회 실패',message:'공식 현황을 불러오지 못했습니다. 사업이 없다는 뜻이 아닙니다.',source:region.name.startsWith('서울')?SEOUL:GYEONGGI};}
